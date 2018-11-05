@@ -41,30 +41,43 @@ contract TransactionProxy is Initializable {
     function () external payable{}
 
     function forward(
-        bytes sig, 
-        address signer, 
-        address destination, 
-        uint value, 
-        bytes data, 
-        address rewardToken, 
-        uint rewardAmount
+        bytes _sig, 
+        address _identity, 
+        address _destination, 
+        uint _value, 
+        bytes _data, 
+        address _rewardToken, 
+        uint _rewardAmount
         ) public {
+        uint seq = nonce[_identity];
+        bytes32 hash = keccak256(abi.encodePacked(address(this), _identity, _destination, _value, _data, _rewardToken, _rewardAmount, seq));
+        nonce[_identity]++;
 
-        uint seq = nonce[signer];
-        bytes32 hash = keccak256(abi.encodePacked(address(this), signer, destination, value, data, rewardToken, rewardAmount, seq));
-        nonce[signer]++;
-        address sigAddr = ECRecovery.recover(hash.toEthSignedMessageHash(),sig);
-        require(isValidDelegate(msg.sender, "veriKey", sigAddr, ethrReg),", invalid signer.");
-        if(rewardAmount > 0){
-            if(rewardToken == address(0)){
-                msg.sender.transfer(rewardAmount);
-            }else{
-                require(transferToken(rewardToken,msg.sender,rewardAmount),"Could not pay with token");
+        address sigAddr = ECRecovery.recover(hash.toEthSignedMessageHash(),_sig);
+        require(_isValidDelegate(_identity, "proxyRelay", msg.sender, ethrReg),", invalid signer.");
+
+        address identityOwner = _getIdOwner(_identity,ethrReg);
+        bool signerStatus = _isValidDelegate(_identity, "veriKey", sigAddr, ethrReg);
+        bool status = false;
+        if(identityOwner == sigAddr){
+            status = true;
+        }else if(signerStatus){
+            status = true;
+        }else{
+            status = false;
+        }
+        
+        require(status,", invalid signer status.");
+        if(_rewardAmount > 0){
+            if(_rewardToken == address(0)){
+                msg.sender.transfer(_rewardAmount);
+            }else {
+                require(_transferToken(_rewardToken,msg.sender,_rewardAmount),", could not pay with token");
             }
         }
         /* solium-disable-next-line security/no-call-value */
-        require(destination.call.value(value)(data),", failed to send data."); // Cannot receive data.
-        emit Forwarded(sig, signer, destination, value, data, rewardToken, rewardAmount, hash);
+        require(_destination.call.value(_value)(_data),", failed to send data."); // Cannot receive data.
+        emit Forwarded(_sig, _identity, _destination, _value, _data, _rewardToken, _rewardAmount, hash);
     }
 
     /*
@@ -73,7 +86,7 @@ contract TransactionProxy is Initializable {
     /// @dev Gets Id Owner from the Ethr DID registry.
     /// @param _identity The address owner.
     /// @param _registry The address of the Ethr DID registry.
-    function getIdOwner(
+    function _getIdOwner(
         address _identity, 
         address _registry
     ) internal view returns(address result){
@@ -96,7 +109,7 @@ contract TransactionProxy is Initializable {
     /// @param _delegateType Type of delegate. Signer -> Secp256k1VerificationKey2018 -> bytes32("veriKey").
     /// @param _delegate The address of the signer delegate.
     /// @param _registry The address of the Ethr DID registry.
-    function isValidDelegate(
+    function _isValidDelegate(
         address _identity, 
         string _delegateType, 
         address _delegate, 
@@ -104,7 +117,7 @@ contract TransactionProxy is Initializable {
     ) internal view returns(bool result){
         require(_registry != address(0), ", ethr registry not set.");
         require(_identity != address(0) && bytes(_delegateType).length > 0 && _delegate != address(0),", invalid delegate input.");
-        bytes memory data = abi.encodeWithSignature("validDelegate(address,bytes32,address)", _identity, stringToBytes32(_delegateType), _delegate);
+        bytes memory data = abi.encodeWithSignature("validDelegate(address,bytes32,address)", _identity, _stringToBytes32(_delegateType), _delegate);
         /* solium-disable-next-line security/no-inline-assembly */
         assembly {
             let ptr := mload(0x40)
@@ -122,18 +135,18 @@ contract TransactionProxy is Initializable {
     /// @param token Token that should be transferred
     /// @param receiver Receiver to whom the token should be transferred
     /// @param amount The amount of tokens that should be transferred
-    function transferToken (
-        address token, 
-        address receiver,
-        uint256 amount
+    function _transferToken (
+        address _tokenAddr, 
+        address _receiver,
+        uint256 _amount
     )
         internal
         returns (bool transferred)
     {
-        bytes memory data = abi.encodeWithSignature("transfer(address,uint256)", receiver, amount);
+        bytes memory data = abi.encodeWithSignature("transfer(address,uint256)", _receiver, _amount);
         // solium-disable-next-line security/no-inline-assembly
         assembly {
-            let success := call(sub(gas, 10000), token, 0, add(data, 0x20), mload(data), 0, 0)
+            let success := call(sub(gas, 10000), _tokenAddr, 0, add(data, 0x20), mload(data), 0, 0)
             let ptr := mload(0x40)
             returndatacopy(ptr, 0, returndatasize)
             switch returndatasize 
@@ -146,7 +159,7 @@ contract TransactionProxy is Initializable {
     /// @dev Converts string to bytes32 type.
     /// @param _string string data.
     /// @return string converted to bytes32.
-    function stringToBytes32(string memory _string) internal pure returns (bytes32) {
+    function _stringToBytes32(string memory _string) internal pure returns (bytes32) {
         bytes32 result;
         require(bytes(_string).length > 0, ", incorrect string lenght.");
         /* solium-disable-next-line security/no-inline-assembly */
