@@ -96,7 +96,6 @@ contract ContractFactory is Initializable,Destructible {
 
     /// @dev Creates a new contract instance and calls the encoded data after creation.
     /// @dev Initialize the contract instance and creates a new entry in the contract registry.
-    /// @param _actor address.
     /// @param _data encoded data to call a specific function in the new instance.
     function createAndCall(bytes _data) external payable {
         address deployed = _deployCode(bytecode);
@@ -107,7 +106,6 @@ contract ContractFactory is Initializable,Destructible {
     }
     
     /// @dev Creates a new contract instance.
-    /// @param _actor address.
     function createContract() external {
         address deployed = _deployCode(bytecode);
         require(deployed.call(CONTRACT_INIT_FSIG, abi.encode(registry)));
