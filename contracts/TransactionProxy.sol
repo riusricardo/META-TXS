@@ -1,23 +1,26 @@
 pragma solidity 0.4.24;
 
-import "./libraries/openzeppelin/migrations/Initializable.sol";
+import "./libraries/openzeppelin/lifecycle/Destructible.sol";
+import "./libraries/openzeppelin/lifecycle/Pausable.sol";
+import "./libraries/openzeppelin/AddressUtils.sol";
 import "./libraries/openzeppelin/ECRecovery.sol";
 
-contract TransactionProxy is Initializable {
+contract TransactionProxy is Pausable,Destructible{
 
     using ECRecovery for bytes32;
 
     /*
      STATE VARIABLES
     */
-    address ethrReg;
+    address public ethrReg;
     mapping(address => uint) public nonce;
     
     /*
-    EXTERNAL FUNCTIONS
+     CONSTRUCTOR
     */
-    function initialize(address _ethrReg) external isInitializer {
-        ethrReg = _ethrReg;
+    constructor(address _registry) public {
+        require(AddressUtils.isContract(_registry), ", cannot set a proxy implementation to a non-contract address");
+        ethrReg = _registry;
     }
 
     /*
@@ -25,7 +28,7 @@ contract TransactionProxy is Initializable {
     */
     event Forwarded (
         bytes sig, 
-        address signer, 
+        address identity, 
         address destination, 
         uint value, 
         bytes data,
@@ -48,17 +51,22 @@ contract TransactionProxy is Initializable {
         bytes _data, 
         address _rewardToken, 
         uint _rewardAmount
-        ) public {
+        ) 
+        public 
+        whenNotPaused
+        {
+        
         uint seq = nonce[_identity];
         bytes32 hash = keccak256(abi.encodePacked(address(this), _identity, _destination, _value, _data, _rewardToken, _rewardAmount, seq));
         nonce[_identity]++;
 
         address sigAddr = ECRecovery.recover(hash.toEthSignedMessageHash(),_sig);
-        require(_isValidDelegate(_identity, "proxyRelay", msg.sender, ethrReg),", invalid signer.");
+        require(_isValidDelegate(_identity, "txRelay", msg.sender, ethrReg),", invalid signer.");
 
-        address identityOwner = _getIdOwner(_identity,ethrReg);
-        bool signerStatus = _isValidDelegate(_identity, "veriKey", sigAddr, ethrReg);
+        bool signerStatus = false;
         bool status = false;
+        address identityOwner = _getIdOwner(_identity, ethrReg);
+        signerStatus = _isValidDelegate(_identity, "veriKey", sigAddr, ethrReg);
         if(identityOwner == sigAddr){
             status = true;
         }else if(signerStatus){
@@ -67,7 +75,7 @@ contract TransactionProxy is Initializable {
             status = false;
         }
         
-        require(status,", invalid signer status.");
+        require(status,", invalid status.");
         if(_rewardAmount > 0){
             if(_rewardToken == address(0)){
                 msg.sender.transfer(_rewardAmount);
@@ -90,14 +98,14 @@ contract TransactionProxy is Initializable {
         address _identity, 
         address _registry
     ) internal view returns(address result){
-        require(_registry != address(0), ", ethr registry not set.");
+        require(_registry != address(0), ", invalid registry.");
         require(_identity != address(0), ", invalid identity.");
         bytes memory data = abi.encodeWithSignature("identityOwner(address)", _identity);
         /* solium-disable-next-line security/no-inline-assembly */
         assembly {
             let ptr := mload(0x40)
-            let idOwner := staticcall(sub(gas, 1500), _registry, add(data, 0x20), mload(data), ptr, 0x20)
-            if eq(idOwner, 0x0) {
+            let success := staticcall(sub(gas, 1500), _registry, add(data, 0x20), mload(data), ptr, 0x20)
+            if eq(success, 0) {
                 revert(0, 0)
             }
             result := mload(ptr)
@@ -115,7 +123,7 @@ contract TransactionProxy is Initializable {
         address _delegate, 
         address _registry
     ) internal view returns(bool result){
-        require(_registry != address(0), ", ethr registry not set.");
+        require(_registry != address(0), ", invalid registry.");
         require(_identity != address(0) && bytes(_delegateType).length > 0 && _delegate != address(0),", invalid delegate input.");
         bytes memory data = abi.encodeWithSignature("validDelegate(address,bytes32,address)", _identity, _stringToBytes32(_delegateType), _delegate);
         /* solium-disable-next-line security/no-inline-assembly */
