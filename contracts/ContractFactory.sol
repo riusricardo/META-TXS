@@ -2,7 +2,7 @@ pragma solidity 0.4.24;
 
 import "./libraries/openzeppelin/migrations/Initializable.sol";
 import "./libraries/openzeppelin/lifecycle/Destructible.sol";
-import "./libraries/openzeppelin/AddressUtils.sol";
+import "./libraries/openzeppelin/utils/Address.sol";
 
 /// @title Factory that creates new contracts from loaded bytecode.
 /// @author Ricardo Rius - <ricardo@rius.info>
@@ -78,7 +78,7 @@ contract ContractFactory is Initializable,Destructible {
     /// @param _registry address.
     function initialize(address _registry) external isInitializer ifNotLocked{
         require(registry == address(0),", registry set.");
-        require(AddressUtils.isContract(_registry), ", cannot set a proxy implementation to a non-contract address");
+        require(Address.isContract(_registry), ", cannot set a proxy implementation to a non-contract address");
         registry = _registry;
     }
     
@@ -88,14 +88,14 @@ contract ContractFactory is Initializable,Destructible {
         require(initialized == true,", factory not initialized.");
         require(_data.length >= 32, ", incorrect bytecode size.");
         bytecode = _data;
-        emit BytecodeChanged(owner, ", the owner updated the code.");
+        emit BytecodeChanged(msg.sender, ", the owner updated the code.");
     }
 
     /// @dev Manual lock for contract bytecode updates.
     function lockFactory() external onlyOwner ifNotLocked{
         require(registry != address(0) && initialized == true,", registry not set.");
         locked = true;
-        emit ContractLocked(owner, ", contract is locked.");
+        emit ContractLocked(msg.sender, ", contract is locked.");
     }
 
     /// @dev Creates a new contract instance and calls the encoded data after creation.

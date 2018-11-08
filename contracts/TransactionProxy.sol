@@ -2,12 +2,13 @@ pragma solidity 0.4.24;
 
 import "./libraries/openzeppelin/lifecycle/Destructible.sol";
 import "./libraries/openzeppelin/lifecycle/Pausable.sol";
-import "./libraries/openzeppelin/AddressUtils.sol";
-import "./libraries/openzeppelin/ECRecovery.sol";
+import "./libraries/openzeppelin/cryptography/ECDSA.sol";
+import "./libraries/openzeppelin/utils/Address.sol";
+
 
 contract TransactionProxy is Pausable,Destructible{
 
-    using ECRecovery for bytes32;
+    using ECDSA for bytes32;
 
     /*
      STATE VARIABLES
@@ -19,7 +20,7 @@ contract TransactionProxy is Pausable,Destructible{
      CONSTRUCTOR
     */
     constructor(address _registry) public {
-        require(AddressUtils.isContract(_registry), ", cannot set a proxy implementation to a non-contract address");
+        require(Address.isContract(_registry), ", cannot set a proxy implementation to a non-contract address");
         ethrReg = _registry;
     }
 
@@ -41,7 +42,8 @@ contract TransactionProxy is Pausable,Destructible{
      PUBLIC FUNCTIONS
     */
     /// @dev Fallback function
-    function () external payable{}
+    function () external payable{
+    }
 
     function forward(
         bytes _sig, 
@@ -60,7 +62,7 @@ contract TransactionProxy is Pausable,Destructible{
         bytes32 hash = keccak256(abi.encodePacked(address(this), _identity, _destination, _value, _data, _rewardToken, _rewardAmount, seq));
         nonce[_identity]++;
 
-        address sigAddr = ECRecovery.recover(hash.toEthSignedMessageHash(),_sig);
+        address sigAddr = ECDSA.recover(hash.toEthSignedMessageHash(),_sig);
         require(_isValidDelegate(_identity, "txRelay", msg.sender, ethrReg),", invalid signer.");
 
         bool signerStatus = false;
@@ -140,9 +142,9 @@ contract TransactionProxy is Pausable,Destructible{
     // @title SecuredTokenTransfer - Secure token transfer
     // @author Richard Meissner - <richard@gnosis.pm>
     /// @dev Transfers a token and returns if it was a success
-    /// @param token Token that should be transferred
-    /// @param receiver Receiver to whom the token should be transferred
-    /// @param amount The amount of tokens that should be transferred
+    /// @param _tokenAddr Token that should be transferred
+    /// @param _receiver Receiver to whom the token should be transferred
+    /// @param _amount The amount of tokens that should be transferred
     function _transferToken (
         address _tokenAddr, 
         address _receiver,
