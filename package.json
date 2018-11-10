@@ -1,0 +1,25 @@
+{
+  "name": "meta-txs",
+  "version": "1.0.0",
+  "description": "ProxyRouter and Meta transactions tests.",
+  "main": "truffle.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/riusricardo/META-TXS.git"
+  },
+  "author": "Ricardo Rius",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/riusricardo/META-TXS/issues"
+  },
+  "homepage": "https://github.com/riusricardo/META-TXS#readme",
+  "dependencies": {
+    "ganache-cli": "^6.1.8"
+  }
+}
