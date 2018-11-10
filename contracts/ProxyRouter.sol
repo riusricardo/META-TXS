@@ -1,53 +1,107 @@
-pragma solidity ^0.4.24;
+pragma solidity 0.4.24;
 
 import "./libraries/openzeppelin/migrations/Initializable.sol";
-import "./libraries/openzeppelin/upgradeability/Proxy.sol";
 import "./libraries/openzeppelin/utils/Address.sol";
 
-contract ProxyRouter is Proxy,Initializable{
+contract ProxyRouter is Initializable{
     /*
      POINTERS SIGNATURES
     */
-    bytes4 private constant CONTRACT_INIT_SIG = bytes4(keccak256("initialize(address)"));
+    bytes4 private constant TOKEN_ROUTE = bytes4(keccak256("Token.Transfer"));
+    bytes4 private constant DATA_ROUTE = bytes4(keccak256("Data.Send"));
 
     /*
      STATE VARIABLES
     */
-    address internal implementation = address(0);
-    address public registry = address(0);
-    address public owner = address(0);
-
-    struct Route {
-        mapping(bytes4 => address) contractPointers;
-        mapping(bytes4 => bool) allowedPointers;
-    }
+    address public fallbackAddr = address(0);
+    mapping(bytes4 => address) public  contractPointer;
+    mapping(bytes4 => bool) public allowedPointer;
 
     /*
     EXTERNAL FUNCTIONS
     */
-    function initialize(address _registry,address _owner,address _implementation) external isInitializer {
-        require(registry == address(0) && owner == address(0),", already set.");
-        require(Address.isContract(_registry), ", cannot set a proxy implementation to a non-contract address");
-        implementation = _implementation;
-        registry = _registry;
-        owner = _owner;
+    function initialize(
+        address _fallback
+        ) 
+        external 
+        isInitializer 
+    {
+        require(fallbackAddr == address(0),", already set.");
+        require(Address.isContract(_fallback), ", cannot set a proxy implementation to a non-contract address");
+        fallbackAddr = _fallback;
+        allowedPointer[TOKEN_ROUTE] = true;
+        allowedPointer[DATA_ROUTE] = true;
+    }
+
+    function () external payable {
+        _fallback();
     }
 
     /*
      INTERNAL FUNCTIONS
     */
-    /// @dev Returns the current implementation.
-    /// @return Address of the current implementation
-    function _implementation() internal view returns (address) {
-        if(msg.sender == owner){
-            return implementation;
+    function _decodeData() 
+        internal 
+        view 
+        returns (
+            address relay,
+            address destination, 
+            bytes memory data, 
+            uint size
+        ) 
+    {
+        if(allowedPointer[msg.sig]){
+            relay = contractPointer[msg.sig];
+            /* solium-disable-next-line security/no-inline-assembly */
+            assembly {
+                size := sub(calldatasize,0x24) // substract 36 bytes.
+                calldatacopy(destination, 0x04, 0x20)
+                calldatacopy(data, 0x24, size)
+            }
         } else {
-            return registry;
+            relay = address(0);
+            destination = fallbackAddr;
+            data = msg.data;
+            size = msg.data.length;
         }
     }
 
-    /// @dev Function that is run as the first thing in the fallback function.
-    function _willFallback() internal {
-        super._willFallback();
+  /**
+   * @dev Delegates execution to an implementation contract.
+   * This is a low level function that doesn't return to its internal call site.
+   * It will return to the external caller whatever the implementation returns.
+   * @param _destination Address to delegate.
+   */
+    function _delegate(
+        address _relay,
+        address _destination, 
+        bytes _data, 
+        uint _size
+        ) 
+        internal 
+    {
+        /* solium-disable-next-line security/no-inline-assembly */
+        assembly {
+            // Call the implementation.
+            // out and outsize are 0 because we don't know the size yet.
+            let result := delegatecall(gas, _destination, _data, _size, 0, 0)
+
+            // Copy the returned data.
+            returndatacopy(0, 0, returndatasize)
+
+            switch result
+            // delegatecall returns 0 on error.
+            case 0 { revert(0, returndatasize) }
+            default { return(0, returndatasize) }
+        }
+    }
+
+  /**
+   * @dev fallback implementation.
+   * Extracted to enable manual triggering.
+   */
+    function _fallback() internal {
+        (address relay,address destination,bytes memory data,uint size) = _decodeData();
+        _delegate(relay, destination, data, size);
     }
 }

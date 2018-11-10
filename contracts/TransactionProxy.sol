@@ -11,17 +11,25 @@ contract TransactionProxy is Pausable,Destructible{
     using ECDSA for bytes32;
 
     /*
+     POINTERS SIGNATURES
+    */
+    bytes4 private constant TOKEN_ROUTE = bytes4(keccak256("Token.Transfer"));
+    bytes4 private constant DATA_ROUTE = bytes4(keccak256("Data.Send"));
+
+    /*
      STATE VARIABLES
     */
     address public ethrReg;
+    address public proxyRouter;
     mapping(address => uint) public nonce;
     
     /*
      CONSTRUCTOR
     */
-    constructor(address _registry) public {
+    constructor(address _registry, address _proxyRouter) public {
         require(Address.isContract(_registry), ", cannot set a proxy implementation to a non-contract address");
         ethrReg = _registry;
+        proxyRouter = _proxyRouter;
     }
 
     /*
@@ -53,10 +61,10 @@ contract TransactionProxy is Pausable,Destructible{
         bytes _data, 
         address _rewardToken, 
         uint _rewardAmount
-        ) 
+    ) 
         public 
         whenNotPaused
-        {
+    {
         
         uint seq = nonce[_identity];
         bytes32 hash = keccak256(abi.encodePacked(address(this), _identity, _destination, _value, _data, _rewardToken, _rewardAmount, seq));
@@ -85,8 +93,9 @@ contract TransactionProxy is Pausable,Destructible{
                 require(_transferToken(_rewardToken,msg.sender,_rewardAmount),", could not pay with token");
             }
         }
+        (bytes memory txData,) = _encodeData(DATA_ROUTE, _destination, _data);
         /* solium-disable-next-line security/no-call-value */
-        require(_destination.call.value(_value)(_data),", failed to send data."); // Cannot receive data.
+        require(proxyRouter.call.value(_value)(txData),", failed to send data."); // Cannot receive data.
         emit Forwarded(_sig, _identity, _destination, _value, _data, _rewardToken, _rewardAmount, hash);
     }
 
@@ -99,7 +108,8 @@ contract TransactionProxy is Pausable,Destructible{
     function _getIdOwner(
         address _identity, 
         address _registry
-    ) internal view returns(address result){
+    ) internal view returns(address result)
+    {
         require(_registry != address(0), ", invalid registry.");
         require(_identity != address(0), ", invalid identity.");
         bytes memory data = abi.encodeWithSignature("identityOwner(address)", _identity);
@@ -124,7 +134,8 @@ contract TransactionProxy is Pausable,Destructible{
         string _delegateType, 
         address _delegate, 
         address _registry
-    ) internal view returns(bool result){
+    ) internal view returns(bool result)
+    {
         require(_registry != address(0), ", invalid registry.");
         require(_identity != address(0) && bytes(_delegateType).length > 0 && _delegate != address(0),", invalid delegate input.");
         bytes memory data = abi.encodeWithSignature("validDelegate(address,bytes32,address)", _identity, _stringToBytes32(_delegateType), _delegate);
@@ -149,9 +160,7 @@ contract TransactionProxy is Pausable,Destructible{
         address _tokenAddr, 
         address _receiver,
         uint256 _amount
-    )
-        internal
-        returns (bool transferred)
+    ) internal returns (bool transferred)
     {
         bytes memory data = abi.encodeWithSignature("transfer(address,uint256)", _receiver, _amount);
         // solium-disable-next-line security/no-inline-assembly
@@ -166,16 +175,39 @@ contract TransactionProxy is Pausable,Destructible{
         }
     }
 
+
+    function _encodeData(bytes4 _route, address _destination, bytes _data) 
+        internal 
+        pure 
+        returns (
+            bytes memory result, 
+            uint size
+        ) 
+    {
+        /* solium-disable-next-line security/no-inline-assembly */
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr,_route)
+            mstore(add(ptr,0x04), _destination)
+            mstore(add(ptr,0x24), _data)
+            result := mload(ptr)
+            size:= add(calldatasize,0x24)
+        }
+    } 
+
     /// @dev Converts string to bytes32 type.
     /// @param _string string data.
     /// @return string converted to bytes32.
-    function _stringToBytes32(string memory _string) internal pure returns (bytes32) {
-        bytes32 result;
+    function _stringToBytes32(string memory _string) 
+        internal 
+        pure 
+        returns (bytes32 result) 
+    {
         require(bytes(_string).length > 0, ", incorrect string lenght.");
         /* solium-disable-next-line security/no-inline-assembly */
         assembly {
             result := mload(add(_string, 32))
         }
         return result;
-    }  
+    }
 }
