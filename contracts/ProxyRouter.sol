@@ -7,7 +7,7 @@ contract ProxyRouter is Initializable{
     /*
      POINTERS SIGNATURES
     */
-    bytes4 private constant TOKEN_ROUTE = bytes4(keccak256("Token.Transfer"));
+    bytes4 private constant OTHER_ROUTE = bytes4(keccak256("Other.Test"));
     bytes4 private constant DATA_ROUTE = bytes4(keccak256("Data.Send"));
 
     /*
@@ -22,7 +22,7 @@ contract ProxyRouter is Initializable{
     */
     function initialize(
         address _fallback
-        ) 
+    ) 
         external 
         isInitializer 
     {
@@ -75,9 +75,9 @@ contract ProxyRouter is Initializable{
     function _delegate(
         address _relay,
         address _destination, 
-        bytes _data, 
+        bytes memory _data, 
         uint _size
-        ) 
+    ) 
         internal 
     {
         /* solium-disable-next-line security/no-inline-assembly */

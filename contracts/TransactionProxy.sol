@@ -13,7 +13,7 @@ contract TransactionProxy is Pausable,Destructible{
     /*
      POINTERS SIGNATURES
     */
-    bytes4 private constant TOKEN_ROUTE = bytes4(keccak256("Token.Transfer"));
+    bytes4 private constant OTHER_ROUTE = bytes4(keccak256("Other.Test"));
     bytes4 private constant DATA_ROUTE = bytes4(keccak256("Data.Send"));
 
     /*
@@ -174,7 +174,6 @@ contract TransactionProxy is Pausable,Destructible{
             default { transferred := 0 }
         }
     }
-
 
     function _encodeData(bytes4 _route, address _destination, bytes _data) 
         internal 

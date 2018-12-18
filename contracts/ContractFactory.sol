@@ -11,7 +11,7 @@ contract ContractFactory is Initializable,Destructible {
     /*
      FUNCTION SIGNATURES
     */
-    bytes4 private constant CONTRACT_INIT_FSIG = bytes4(keccak256("initialize(address)"));
+    bytes4 private constant CONTRACT_INIT_FSIG = bytes4(keccak256("initialize(address,address)"));
 
     /*
      STATE VARIABLES
@@ -70,7 +70,7 @@ contract ContractFactory is Initializable,Destructible {
     EXTERNAL FUNCTIONS
     */
     /// @dev Only owner can retrieve the loaded bytecode.
-    function getBytecode() external view onlyOwner returns(bytes){
+    function getBytecode() external view onlyOwner returns(bytes memory){
         return bytecode;
     }
 
